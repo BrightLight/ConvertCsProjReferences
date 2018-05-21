@@ -25,21 +25,32 @@ namespace ConvertCsProjReferences
         csProjContent.Load(csprojFile);
         var csProjUri = new Uri(csprojFile);
 
-        foreach (XmlNode referenceNode in csProjContent.SelectNodes(@"//HintPath"))
+        string xmlns = csProjContent.DocumentElement.Attributes["xmlns"].Value;
+        XmlNamespaceManager nsmgr = new XmlNamespaceManager(csProjContent.NameTable);
+        nsmgr.AddNamespace("MsBuild", xmlns);
+        var isModified = false;
+        foreach (XmlElement referenceNode in csProjContent.DocumentElement.SelectNodes(@"//MsBuild:HintPath", nsmgr))
         {
-          var fileReference = referenceNode.Value;
+          var fileReference = referenceNode.InnerText;
           var newFileReference = Environment.ExpandEnvironmentVariables(fileReference);
-          var newFileReferenceUri = new Uri(newFileReference);
-          var relativeFileReference = newFileReferenceUri.MakeRelativeUri(csProjUri);
-          referenceNode.Value = relativeFileReference.ToString();
+          var newFileReferenceUri = new Uri(newFileReference, UriKind.RelativeOrAbsolute);
+          if (newFileReferenceUri.IsAbsoluteUri)
+          {
+            var relativeFileReference = newFileReferenceUri.MakeRelativeUri(csProjUri);
+            referenceNode.InnerText = relativeFileReference.ToString();
+            isModified = true;
+          }
         }
 
-        var xmlWriterSettings = new XmlWriterSettings();
-        xmlWriterSettings.Indent = true;
-        xmlWriterSettings.IndentChars = "  ";
-        var xmlWriter = XmlWriter.Create(csprojFile, xmlWriterSettings);
-        csProjContent.WriteTo(xmlWriter);
-        xmlWriter.Flush();
+        if (isModified)
+        {
+          var xmlWriterSettings = new XmlWriterSettings();
+          xmlWriterSettings.Indent = true;
+          xmlWriterSettings.IndentChars = "  ";
+          var xmlWriter = XmlWriter.Create(csprojFile, xmlWriterSettings);
+          csProjContent.WriteTo(xmlWriter);
+          xmlWriter.Flush();
+        }
       }
     }
 
